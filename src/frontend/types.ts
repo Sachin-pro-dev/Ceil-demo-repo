@@ -1,20 +1,30 @@
-export type LeaveType = 'Vacation' | 'Sick Leave' | 'Personal Leave' | 'Parental Leave';
-
-export type LeaveStatus = 'Pending' | 'Approved' | 'Rejected';
-
 export interface LeaveRequest {
   id: string;
-  leaveType: LeaveType;
+  employeeName: string;
+  department: string;
+  leaveType: 'Annual' | 'Sick' | 'Maternity/Paternity' | 'Unpaid' | 'Other';
   startDate: string;
   endDate: string;
-  reason: string;
-  status: LeaveStatus;
-  appliedDate: string;
-  approverComments?: string;
+  days: number;
+  status: 'Approved' | 'Pending' | 'Rejected';
 }
 
-export interface LeaveBalance {
-  type: LeaveType;
-  allocated: number;
-  used: number;
+export interface DepartmentMetric {
+  department: string;
+  approvedDays: number;
+  pendingRequests: number;
+  headcount: number;
+}
+
+export interface GlobalConfig {
+  defaultAnnualAllowance: number;
+  maxCarryOverDays: number;
+  allowNegativeBalance: boolean;
+  autoApproveSickLeave: boolean;
+  blackoutPeriods: {
+    id: string;
+    name: string;
+    startDate: string;
+    endDate: string;
+  }[];
 }
