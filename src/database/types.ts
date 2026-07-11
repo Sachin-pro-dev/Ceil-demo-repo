@@ -1,49 +1,40 @@
 /**
- * TypeScript interfaces and type definitions matching the database schema.
- * These types provide safe interaction with database queries on the backend.
+ * TypeScript type definitions mapping directly to the database schema
+ * for users, leave requests, and approval logs.
  */
 
-export type UserRoleName = 'ADMIN' | 'MANAGER' | 'EMPLOYEE';
-
-export type LeaveType = 'ANNUAL' | 'SICK' | 'PARENTAL' | 'UNPAID';
-
-export type LeaveStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'CANCELLED';
-
-export interface Role {
-  id: number;
-  name: UserRoleName;
-  description: string | null;
-  created_at: Date;
-}
+export type UserRole = 'employee' | 'manager' | 'admin';
+export type LeaveStatus = 'pending' | 'approved' | 'rejected' | 'cancelled';
+export type LeaveType = 'vacation' | 'sick' | 'personal' | 'parental' | 'unpaid';
 
 export interface User {
-  id: number;
+  id: string;
   email: string;
-  first_name: string;
-  last_name: string;
-  role_id: number;
-  created_at: Date;
-}
-
-export interface LeaveBalance {
-  id: number;
-  user_id: number;
-  leave_type: LeaveType;
-  allocated_days: number;
-  used_days: number;
-  year: number;
-  updated_at: Date;
+  fullName: string;
+  role: UserRole;
+  managerId: string | null;
+  isActive: boolean;
+  createdAt: Date;
+  updatedAt: Date;
 }
 
 export interface LeaveRequest {
-  id: number;
-  user_id: number;
-  leave_type: LeaveType;
-  start_date: string; // ISO date format YYYY-MM-DD
-  end_date: string;   // ISO date format YYYY-MM-DD
-  status: LeaveStatus;
+  id: string;
+  userId: string;
+  leaveType: LeaveType;
+  startDate: string; // ISO Date String (YYYY-MM-DD)
+  endDate: string;   // ISO Date String (YYYY-MM-DD)
   reason: string | null;
-  approver_id: number | null;
-  created_at: Date;
-  updated_at: Date;
+  status: LeaveStatus;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface ApprovalLog {
+  id: string;
+  leaveRequestId: string;
+  approverId: string;
+  action: LeaveStatus;
+  comment: string | null;
+  createdAt: Date;
 }
