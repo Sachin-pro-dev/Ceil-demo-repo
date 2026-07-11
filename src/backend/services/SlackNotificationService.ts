@@ -1,187 +1,170 @@
-import { 
-  SlackMessagePayload, 
-  LeaveStatusNotification, 
-  PendingActionNotification 
-} from '../types/slack';
-
 /**
- * Service responsible for sending formatted rich notifications to Slack
- * using the Slack Webhook API.
+ * Slack Notification Service
+ * Handles integration with Slack Web API using rich Block Kit layouts
+ * for real-time leave request alerts.
  */
+
+export interface LeaveRequest {
+  id: string;
+  employeeId: string;
+  startDate: string;
+  endDate: string;
+  leaveType: string;
+  reason?: string;
+  status: 'PENDING' | 'APPROVED' | 'REJECTED';
+}
+
 export class SlackNotificationService {
-  private webhookUrl: string;
+  private readonly slackApiToken: string;
+  private readonly slackApiUrl = 'https://slack.com/api/chat.postMessage';
 
-  /**
-   * Initializes the service with a target Slack Webhook URL.
-   * @param webhookUrl The Slack Incoming Webhook URL.
-   */
-  constructor(webhookUrl?: string) {
-    const url = webhookUrl || process.env.SLACK_WEBHOOK_URL;
-    if (!url) {
-      throw new Error('Slack Notification Service initialization failed: Missing webhook URL.');
+  constructor() {
+    const token = process.env.SLACK_BOT_TOKEN;
+    if (!token) {
+      console.warn('SLACK_BOT_TOKEN is not defined. Slack notifications will be simulated.');
     }
-    this.webhookUrl = url;
+    this.slackApiToken = token || 'mock-token';
   }
 
   /**
-   * Sends a general raw Slack payload to the configured webhook.
+   * Sends a rich notification to a manager when an employee submits a new leave request.
    */
-  public async sendPayload(payload: SlackMessagePayload): Promise<boolean> {
-    try {
-      const response = await fetch(this.webhookUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(payload),
-      });
-
-      if (!response.ok) {
-        const responseText = await response.text();
-        console.error(`Slack API error [Status ${response.status}]: ${responseText}`);
-        return false;
-      }
-
-      return true;
-    } catch (error) {
-      console.error('Failed to dispatch Slack notification:', error);
-      return false;
-    }
-  }
-
-  /**
-   * Formats and triggers an alert for a change in leave request status.
-   */
-  public async notifyLeaveStatus(data: LeaveStatusNotification): Promise<boolean> {
-    let statusEmoji = '⏳';
-    let statusColor = 'Pending';
-    
-    if (data.status === 'APPROVED') {
-      statusEmoji = '✅';
-      statusColor = 'Approved';
-    } else if (data.status === 'REJECTED') {
-      statusEmoji = '❌';
-      statusColor = 'Rejected';
-    }
-
-    const fallbackText = `Leave Request Update: ${data.employeeName}'s request is ${statusColor}.`;
-
-    const payload: SlackMessagePayload = {
-      text: fallbackText,
-      blocks: [
-        {
-          type: 'header',
-          text: {
-            type: 'plain_text',
-            text: `${statusEmoji} Leave Request Status Update`,
-            emoji: true
-          }
-        },
-        {
-          type: 'section',
-          text: {
-            type: 'mrkdwn',
-            text: `*${data.employeeName}*'s leave request has been *${statusColor.toLowerCase()}*.`
-          }
-        },
-        {
-          type: 'divider'
-        },
-        {
-          type: 'section',
-          fields: [
-            { type: 'mrkdwn', text: `*Leave Type:*
-${data.leaveType}` },
-            { type: 'mrkdwn', text: `*Duration:*
-${data.startDate} to ${data.endDate}` },
-            { type: 'mrkdwn', text: `*Status:*
-${statusEmoji} ${statusColor}` },
-            { type: 'mrkdwn', text: `*Handled By:*
-${data.approverName || 'N/A'}` }
-          ]
+  async notifyLeaveSubmission(
+    request: LeaveRequest,
+    employeeName: string,
+    managerSlackId: string
+  ): Promise<boolean> {
+    const blocks = [
+      {
+        type: 'header',
+        text: {
+          type: 'plain_text',
+          text: '📅 New Leave Request Submitted',
+          emoji: true
         }
-      ]
-    };
-
-    if (data.comments && payload.blocks) {
-      payload.blocks.push({
+      },
+      {
         type: 'section',
         text: {
           type: 'mrkdwn',
-          text: `*Approver Comments:*
-> ${data.comments}`
+          text: `*${employeeName}* has submitted a request for leave.`
+        }
+      },
+      {
+        type: 'section',
+        fields: [
+          { type: 'mrkdwn', text: `*Type:*
+${request.leaveType}` },
+          { type: 'mrkdwn', text: `*Dates:*
+${request.startDate} to ${request.endDate}` }
+        ]
+      }
+    ];
+
+    if (request.reason) {
+      blocks.push({
+        type: 'section',
+        text: {
+          type: 'mrkdwn',
+          text: `*Reason:*
+_${request.reason}_`
         }
       });
     }
 
-    return this.sendPayload(payload);
+    // Add action buttons for the manager directly inside Slack
+    blocks.push({
+      type: 'actions',
+      elements: [
+        {
+          type: 'button',
+          text: { type: 'plain_text', text: 'Approve', emoji: true },
+          style: 'primary',
+          value: `approve_${request.id}`,
+          action_id: 'approve_leave'
+        },
+        {
+          type: 'button',
+          text: { type: 'plain_text', text: 'Reject', emoji: true },
+          style: 'danger',
+          value: `reject_${request.id}`,
+          action_id: 'reject_leave'
+        }
+      ]
+    });
+
+    return this.sendSlackMessage(managerSlackId, 'New Leave Request', blocks);
   }
 
   /**
-   * Formats and triggers an alert for a pending action requiring attention.
+   * Sends an alert to the employee when their leave request status changes.
    */
-  public async notifyPendingAction(data: PendingActionNotification): Promise<boolean> {
-    const fallbackText = `Pending Action Required: ${data.title}`;
+  async notifyLeaveStatusChange(
+    request: LeaveRequest,
+    employeeSlackId: string,
+    managerName: string
+  ): Promise<boolean> {
+    const isApproved = request.status === 'APPROVED';
+    const statusEmoji = isApproved ? '✅' : '❌';
+    const statusColor = isApproved ? '#2eb886' : '#a30200';
 
-    const payload: SlackMessagePayload = {
-      text: fallbackText,
-      blocks: [
-        {
-          type: 'header',
-          text: {
-            type: 'plain_text',
-            text: '🔔 Action Required' 
-          }
-        },
-        {
-          type: 'section',
-          text: {
-            type: 'mrkdwn',
-            text: `*Title:* ${data.title}
-*Requested By:* ${data.requesterName}`
-          }
-        },
-        {
-          type: 'section',
-          text: {
-            type: 'mrkdwn',
-            text: `*Description:*
-${data.description}`
-          }
+    const blocks = [
+      {
+        type: 'header',
+        text: {
+          type: 'plain_text',
+          text: `${statusEmoji} Leave Request Update`,
+          emoji: true
         }
-      ]
-    };
+      },
+      {
+        type: 'section',
+        text: {
+          type: 'mrkdwn',
+          text: `Your leave request for *${request.startDate} to ${request.endDate}* has been *${request.status.toLowerCase()}* by ${managerName}.`
+        }
+      }
+    ];
 
-    if (data.dueDate && payload.blocks) {
-      payload.blocks.push({
-        type: 'context',
-        elements: [
-          {
-            type: 'mrkdwn',
-            text: `⏰ *Due Date:* ${data.dueDate}`
-          }
-        ]
-      });
+    return this.sendSlackMessage(employeeSlackId, `Leave Request ${request.status}`, blocks);
+  }
+
+  /**
+   * Internal helper to dispatch POST request to Slack API
+   */
+  private async sendSlackMessage(
+    channelOrUserId: string,
+    fallbackText: string,
+    blocks: any[]
+  ): Promise<boolean> {
+    if (this.slackApiToken === 'mock-token') {
+      console.log(`[Mock Slack] Sending message to ${channelOrUserId}:`, JSON.stringify({ fallbackText, blocks }, null, 2));
+      return true;
     }
 
-    if (payload.blocks) {
-      payload.blocks.push({
-        type: 'actions',
-        elements: [
-          {
-            type: 'button',
-            text: {
-              type: 'plain_text',
-              text: 'View & Action Request'
-            },
-            style: 'primary',
-            url: data.actionUrl,
-            action_id: `action_link_${data.actionId}`
-          }
-        ]
+    try {
+      const response = await fetch(this.slackApiUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json; charset=utf-8',
+          'Authorization': `Bearer ${this.slackApiToken}`
+        },
+        body: JSON.stringify({
+          channel: channelOrUserId,
+          text: fallbackText,
+          blocks: blocks
+        })
       });
-    }
 
-    return this.sendPayload(payload);
+      const data = await response.json() as { ok: boolean; error?: string };
+      if (!data.ok) {
+        console.error('Slack API error:', data.error);
+        return false;
+      }
+      return true;
+    } catch (error) {
+      console.error('Failed to send Slack notification:', error);
+      return false;
+    }
   }
 }
