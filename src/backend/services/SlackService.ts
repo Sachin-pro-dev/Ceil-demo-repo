@@ -1,131 +1,123 @@
-import { ApprovalDetails, SlackConfig } from '../types/ApprovalTypes';
-
 /**
- * Service class responsible for formatting and dispatching messages to Slack.
+ * Service responsible for sending formatted real-time alerts to Slack
+ * using Slack incoming webhooks and Slack Block Kit payloads.
  */
+
+export interface LeaveRequest {
+  id: string;
+  employeeName: string;
+  startDate: string;
+  endDate: string;
+  reason: string;
+  status: 'PENDING' | 'APPROVED' | 'REJECTED';
+}
+
 export class SlackService {
   private webhookUrl: string;
 
-  constructor(config: SlackConfig) {
-    if (!config.webhookUrl) {
-      throw new Error('Slack Webhook URL is required to send notifications.');
-    }
-    this.webhookUrl = config.webhookUrl;
+  constructor() {
+    // Expects SLACK_WEBHOOK_URL to be defined in environment variables
+    this.webhookUrl = process.env.SLACK_WEBHOOK_URL || '';
   }
 
   /**
-   * Sends a rich Block Kit notification to the configured Slack channel.
+   * Sends a structured payload to the configured Slack webhook URL.
    */
-  public async sendApprovalNotification(details: ApprovalDetails): Promise<void> {
-    const blocks = this.buildSlackBlocks(details);
+  private async sendNotification(payload: object): Promise<boolean> {
+    if (!this.webhookUrl) {
+      console.warn('[SlackService] Webhook URL not configured. Notification skipped.');
+      return false;
+    }
 
-    const response = await fetch(this.webhookUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ blocks }),
-    });
+    try {
+      const response = await fetch(this.webhookUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      });
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`Slack API returned status ${response.status}: ${errorText}`);
+      if (!response.ok) {
+        throw new Error(`Slack API responded with status ${response.status}`);
+      }
+
+      return true;
+    } catch (error) {
+      console.error('[SlackService] Error sending Slack notification:', error);
+      return false;
     }
   }
 
   /**
-   * Formats the approval details into rich Slack Block Kit components.
+   * Triggers an alert when a new leave request is submitted and is pending approval.
    */
-  private buildSlackBlocks(details: ApprovalDetails): Array<any> {
-    const stageLabels: Record<string, string> = {
-      SUBMITTED: '🟡 *Pending Approval*',
-      APPROVED: '🟢 *Approved*',
-      REJECTED: '🔴 *Rejected*',
-      CHANGES_REQUESTED: '🟠 *Changes Requested*',
+  public async sendPendingApprovalNotification(request: LeaveRequest): Promise<boolean> {
+    const payload = {
+      blocks: [
+        {
+          type: 'header',
+          text: {
+            type: 'plain_text',
+            text: '🚨 New Leave Request Pending Approval',
+            emoji: true,
+          },
+        },
+        {
+          type: 'section',
+          fields: [
+            {
+              type: 'mrkdwn',
+              text: `*Employee:*\n${request.employeeName}`,
+            },
+            {
+              type: 'mrkdwn',
+              text: `*Dates:*\n${request.startDate} to ${request.endDate}`,
+            },
+            {
+              type: 'mrkdwn',
+              text: `*Reason:*\n${request.reason}`,
+            },
+            {
+              type: 'mrkdwn',
+              text: `*Status:*\n⏳ Pending`,
+            },
+          ],
+        },
+      ],
     };
 
-    const statusLabel = stageLabels[details.stage] || `*${details.stage}*`;
+    return this.sendNotification(payload);
+  }
 
-    const blocks: Array<any> = [
-      {
-        type: 'header',
-        text: {
-          type: 'plain_text',
-          text: 'Ceil Approval Lifecycle Update',
-          emoji: true,
+  /**
+   * Triggers an alert when a leave request status has been updated (Approved/Rejected).
+   */
+  public async sendStatusUpdateNotification(request: LeaveRequest): Promise<boolean> {
+    const isApproved = request.status === 'APPROVED';
+    const statusEmoji = isApproved ? '✅' : '❌';
+    const statusText = isApproved ? 'Approved' : 'Rejected';
+
+    const payload = {
+      blocks: [
+        {
+          type: 'header',
+          text: {
+            type: 'plain_text',
+            text: `${statusEmoji} Leave Request Status Update`,
+            emoji: true,
+          },
         },
-      },
-      {
-        type: 'section',
-        text: {
-          type: 'mrkdwn',
-          text: `*Item:* ${details.title}\n*Status:* ${statusLabel}`,
+        {
+          type: 'section',
+          text: {
+            type: 'mrkdwn',
+            text: `The leave request submitted by *${request.employeeName}* for *${request.startDate}* to *${request.endDate}* has been *${statusText}*.`,
+          },
         },
-      },
-      {
-        type: 'divider',
-      },
-      {
-        type: 'section',
-        fields: [
-          {
-            type: 'mrkdwn',
-            text: `*Requester:*\n${details.requesterName} (${details.requesterEmail})`,
-          },
-          {
-            type: 'mrkdwn',
-            text: `*Project:*\n${details.project || 'N/A'}`,
-          },
-        ],
-      },
-    ];
+      ],
+    };
 
-    if (details.approverName) {
-      blocks.push({
-        type: 'section',
-        fields: [
-          {
-            type: 'mrkdwn',
-            text: `*Actioned By:*\n${details.approverName}`,
-          },
-          {
-            type: 'mrkdwn',
-            text: `*Time:*\n${new Date(details.timestamp).toLocaleString()}`,
-          },
-        ],
-      });
-    }
-
-    if (details.comments) {
-      blocks.push({
-        type: 'section',
-        text: {
-          type: 'mrkdwn',
-          text: `*Comments:*\n>${details.comments}`,
-        },
-      });
-    }
-
-    // Add action button for pending requests
-    if (details.stage === 'SUBMITTED') {
-      blocks.push({
-        type: 'actions',
-        elements: [
-          {
-            type: 'button',
-            text: {
-              type: 'plain_text',
-              text: 'View Approval Request',
-              emoji: true,
-            },
-            value: details.id,
-            url: `https://ceil.delivery/approvals/${details.id}`,
-            style: 'primary',
-          },
-        ],
-      });
-    }
-
-    return blocks;
+    return this.sendNotification(payload);
   }
 }
