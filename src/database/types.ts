@@ -1,10 +1,11 @@
 /**
- * TypeScript interfaces and type definitions representing the Leave Management database schema.
+ * TypeScript interfaces and type definitions matching the Leave Management schema.
  */
 
-export type UserRole = 'EMPLOYEE' | 'MANAGER' | 'ADMIN';
-export type LeaveType = 'ANNUAL' | 'SICK' | 'PARENTAL' | 'UNPAID' | 'BEREAVEMENT' | 'OTHER';
+export type UserRole = 'EMPLOYEE' | 'MANAGER' | 'HR_ADMIN';
+export type LeaveType = 'ANNUAL' | 'SICK' | 'MATERNITY' | 'PATERNITY' | 'UNPAID' | 'OTHER';
 export type RequestStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'CANCELLED';
+export type ApprovalStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
 
 export interface User {
   id: string;
@@ -12,29 +13,39 @@ export interface User {
   fullName: string;
   role: UserRole;
   managerId: string | null;
-  totalLeaveAllowance: number;
-  remainingLeaveAllowance: number;
   createdAt: Date;
   updatedAt: Date;
+}
+
+export interface LeaveBalance {
+  id: string;
+  userId: string;
+  leaveType: LeaveType;
+  year: number;
+  allocatedDays: number;
+  usedDays: number;
 }
 
 export interface LeaveRequest {
   id: string;
   userId: string;
   leaveType: LeaveType;
-  startDate: string; // ISO Date format (YYYY-MM-DD)
-  endDate: string;   // ISO Date format (YYYY-MM-DD)
-  status: RequestStatus;
+  startDate: string; // ISO Date String (YYYY-MM-DD)
+  endDate: string;   // ISO Date String (YYYY-MM-DD)
+  totalDays: number;
   reason: string | null;
+  status: RequestStatus;
   createdAt: Date;
   updatedAt: Date;
 }
 
-export interface ApprovalHistory {
+export interface ApprovalStep {
   id: string;
   requestId: string;
   approverId: string;
-  statusAction: RequestStatus;
-  remarks: string | null;
-  actionedAt: Date;
+  stepOrder: number;
+  status: ApprovalStatus;
+  comments: string | null;
+  actionedAt: Date | null;
+  createdAt: Date;
 }
