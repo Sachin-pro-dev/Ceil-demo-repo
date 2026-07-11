@@ -1,20 +1,24 @@
-export type LeaveType = 'Vacation' | 'Sick Leave' | 'Personal Leave' | 'Parental Leave';
+/**
+ * Type definitions for the Leave Request Admin Dashboard.
+ */
 
 export type LeaveStatus = 'Pending' | 'Approved' | 'Rejected';
 
 export interface LeaveRequest {
   id: string;
-  leaveType: LeaveType;
+  employeeName: string;
+  employeeEmail: string;
+  leaveType: string;
   startDate: string;
   endDate: string;
   reason: string;
   status: LeaveStatus;
   appliedDate: string;
-  approverComments?: string;
 }
 
-export interface LeaveBalance {
-  type: LeaveType;
-  allocated: number;
-  used: number;
+export interface DashboardStats {
+  total: number;
+  pending: number;
+  approved: number;
+  rejected: number;
 }
