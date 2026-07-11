@@ -1,4 +1,8 @@
-export type LeaveType = 'Vacation' | 'Sick Leave' | 'Personal Leave' | 'Parental Leave';
+/**
+ * Types and Interfaces for the Leave Request System
+ */
+
+export type LeaveType = 'Annual Leave' | 'Sick Leave' | 'Maternity/Paternity' | 'Unpaid Leave' | 'Compassionate Leave';
 
 export type LeaveStatus = 'Pending' | 'Approved' | 'Rejected';
 
@@ -9,12 +13,14 @@ export interface LeaveRequest {
   endDate: string;
   reason: string;
   status: LeaveStatus;
-  appliedDate: string;
-  approverComments?: string;
+  createdAt: string;
+  reviewedBy?: string;
+  reviewComment?: string;
 }
 
 export interface LeaveBalance {
-  type: LeaveType;
+  leaveType: LeaveType;
   allocated: number;
   used: number;
+  pending: number;
 }
