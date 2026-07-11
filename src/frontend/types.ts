@@ -1,6 +1,12 @@
-export type LeaveType = 'Vacation' | 'Sick Leave' | 'Personal Leave' | 'Parental Leave';
+export type LeaveType = 'Annual' | 'Sick' | 'Maternity' | 'Paternity' | 'Unpaid' | 'Study';
 
-export type LeaveStatus = 'Pending' | 'Approved' | 'Rejected';
+export interface LeaveBalance {
+  type: LeaveType;
+  allocated: number;
+  used: number;
+  pending: number;
+  remaining: number;
+}
 
 export interface LeaveRequest {
   id: string;
@@ -8,13 +14,6 @@ export interface LeaveRequest {
   startDate: string;
   endDate: string;
   reason: string;
-  status: LeaveStatus;
-  appliedDate: string;
-  approverComments?: string;
-}
-
-export interface LeaveBalance {
-  type: LeaveType;
-  allocated: number;
-  used: number;
+  status: 'Approved' | 'Pending' | 'Rejected';
+  submittedAt: string;
 }
